@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import axios from 'axios'
+import graphqlClient from './utils/graphqlClient'
+import { SEND_MESSAGE_MUTATION } from './graphql/mutations'
 import ChatMessage from './components/ChatMessage'
 import ChatInput from './components/ChatInput'
 import './App.css'
@@ -36,27 +37,19 @@ function App() {
         content: msg.content
       }))
 
-      // 调用后端 API
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/chat`,
-        {
-          message: userMessage,
-          conversationHistory: conversationHistory
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      )
+      // 调用后端 GraphQL API
+      const data = await graphqlClient.request(SEND_MESSAGE_MUTATION, {
+        message: userMessage,
+        conversationHistory: conversationHistory
+      })
 
       // 添加 AI 回复
       const aiMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: response.data.message,
+        content: data.sendMessage.message,
         timestamp: new Date(),
-        usage: response.data.usage
+        usage: data.sendMessage.usage
       }
       setMessages(prev => [...prev, aiMessage])
 
@@ -64,10 +57,12 @@ function App() {
       console.error('发送消息失败:', error)
 
       // 添加错误消息
+      // GraphQL 错误可能在 error.response.errors 中
+      const errorDetails = error.response?.errors?.[0]?.message || error.message
       const errorMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: `抱歉，发生了错误：${error.response?.data?.details || error.message}`,
+        content: `抱歉，发生了错误：${errorDetails}`,
         timestamp: new Date(),
         isError: true
       }
